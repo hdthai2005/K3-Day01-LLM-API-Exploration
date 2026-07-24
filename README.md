@@ -63,6 +63,21 @@ Code trong `template.py` đã gọi sẵn `load_dotenv()` nên key trong `.env`
 được nạp tự động. File `.env` đã nằm trong `.gitignore` — **tuyệt đối không
 commit hoặc chia sẻ API key**.
 
+### Chạy demo Streamlit
+
+```powershell
+uv add -r requirements.txt
+uv run streamlit run streamlit_app.py
+```
+
+Demo có giao diện chat streaming, persona tùy chỉnh, retry, thống kê token/
+chi phí và bộ nhớ dài hạn. Khi hội thoại vượt quá 3 lượt gần nhất, ứng dụng
+tóm tắt ngữ cảnh cũ bằng model mini và tự dùng bộ nhớ cục bộ nếu việc tóm tắt
+gặp lỗi.
+
+Xem sơ đồ và giải thích chi tiết tại
+[STREAMLIT_WORKFLOW_GUIDE.md](STREAMLIT_WORKFLOW_GUIDE.md).
+
 ---
 
 ## Lịch Trình & Checkpoint
@@ -89,6 +104,7 @@ K3-Day01-LLM-API-Exploration/
 ├── LAB_GUIDE.md         # Hướng dẫn chi tiết từng bước + checkpoint
 ├── exercises.md         # Phiếu bài tập & phản ánh (9 câu)
 ├── template.py          # Nơi bạn viết code — điền các TODO
+├── streamlit_app.py     # Demo UI/UX cho trợ lý Block 4
 ├── grade.py             # Chấm điểm tự động
 ├── requirements.txt
 └── tests/

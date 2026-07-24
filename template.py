@@ -258,7 +258,10 @@ def estimate_cost(prompt: str, response: str, model: str = OPENAI_MODEL) -> dict
     input_tokens = count_tokens(prompt, model)
     output_tokens = count_tokens(response, model)
 
-    pricing = PRICING_PER_1K_TOKENS[model]
+    pricing = PRICING_PER_1K_TOKENS.get(
+        model,
+        PRICING_PER_1K_TOKENS["gpt-4o"],
+    )
     input_cost = input_tokens / 1000 * pricing["input"]
     output_cost = output_tokens / 1000 * pricing["output"]
 
@@ -363,6 +366,42 @@ def retry_with_backoff(
 # ===========================================================================
 # PART 4 — MINI-PROJECT: TRỢ LÝ CLI HOÀN CHỈNH (Block 4: 12h10–12h50)
 # ===========================================================================
+def update_memory_summary(
+    current_summary: str,
+    archived_messages: list[dict],
+    max_chars: int = 2000,
+) -> str:
+    """
+    Gộp các message sắp bị cắt khỏi history vào bộ nhớ dài hạn cục bộ.
+
+    Hàm không gọi API nên không làm phát sinh chi phí hoặc ảnh hưởng cơ chế
+    retry. Nội dung mới nhất được ưu tiên khi bộ nhớ vượt quá `max_chars`.
+    """
+    if max_chars <= 0:
+        return ""
+
+    role_labels = {
+        "user": "Người dùng",
+        "assistant": "Trợ lý",
+        "system": "Hệ thống",
+    }
+    memory_parts = []
+    if current_summary.strip():
+        memory_parts.append(current_summary.strip())
+
+    for message in archived_messages:
+        content = str(message.get("content", "")).strip()
+        if not content:
+            continue
+        role = role_labels.get(message.get("role"), "Tin nhắn")
+        memory_parts.append(f"{role}: {content}")
+
+    memory = "\n".join(memory_parts)
+    if len(memory) <= max_chars:
+        return memory
+    return "…" + memory[-(max_chars - 1):]
+
+
 def run_assistant(
     persona: str,
     get_input: Callable[[], str] = None,
@@ -379,7 +418,7 @@ def run_assistant(
            Bọc lời gọi API trong retry_with_backoff để chịu lỗi tạm thời.
         4. In từng chunk khi stream về, ghép lại thành reply hoàn chỉnh.
         5. Cập nhật history (user + assistant), giữ tối đa 3 lượt cuối
-           (6 message): history = history[-6:]
+           (6 message); các lượt cũ được gộp vào bộ nhớ dài hạn.
         6. Cộng dồn thống kê bằng count_tokens và estimate_cost.
         7. Dừng khi đạt max_turns (nếu được đặt).
 
@@ -422,6 +461,7 @@ def run_assistant(
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     history = []
+    memory_summary = ""
     num_turns = 0
     total_tokens = 0
     total_cost = 0.0
@@ -434,8 +474,21 @@ def run_assistant(
         if user_msg.strip().lower() in ("quit", "exit"):
             break
 
+        memory_messages = []
+        if memory_summary:
+            memory_messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Bộ nhớ từ các lượt trước, chỉ dùng làm ngữ cảnh:\n"
+                        f"{memory_summary}"
+                    ),
+                }
+            )
+
         messages = (
             [{"role": "system", "content": persona}]
+            + memory_messages
             + history
             + [{"role": "user", "content": user_msg}]
         )
@@ -462,7 +515,12 @@ def run_assistant(
                 {"role": "assistant", "content": reply},
             ]
         )
-        history = history[-6:]
+        if len(history) > 6:
+            memory_summary = update_memory_summary(
+                memory_summary,
+                history[:-6],
+            )
+            history = history[-6:]
 
         num_turns += 1
         total_tokens += count_tokens(user_msg) + count_tokens(reply)
